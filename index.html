@@ -703,7 +703,7 @@ body.dark .ticker-bar{border-bottom-color:rgba(46,204,113,.3)}
       <h2>Player Sign In</h2>
       <p>Use credentials provided by the admin to access today's games</p>
       <div id="loginErr" class="l-err">Invalid username or password. Please try again.</div>
-      <input class="l-in" id="loginUser" type="text" placeholder="Username" autocomplete="username"/>
+      <input class="l-in" id="loginUser" type="text" placeholder="Username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"/>
       <input class="l-in" id="loginPass" type="password" placeholder="Password" autocomplete="current-password"/>
       <button class="l-btn" onclick="doLogin()">Sign In &amp; View Today's Games →</button>
       <div style="text-align:center;margin-top:16px">
@@ -2001,7 +2001,7 @@ async function refreshPickResult() {
 //  AUTH — Supabase  (v13: PBKDF2 hashed + rate limited)
 // ══════════════════════════════════════════════════════════════
 async function doLogin(){
-  const u = document.getElementById('loginUser').value.trim();
+  const u = document.getElementById('loginUser').value.trim().toLowerCase();
   const p = document.getElementById('loginPass').value;
   const err = document.getElementById('loginErr');
   err.classList.remove('show');
@@ -2031,7 +2031,7 @@ async function doLogin(){
     } else {
       // Attempt 2: plain-text fallback (migration path — first login after v13 deploy)
       const { data: d2 } = await db.from('players').select('*')
-        .eq('username', u).eq('password_hash', p).single();
+        .eq('username', u).eq('plain_password', p).single();
       if (d2) {
         data = d2;
         // Auto-upgrade: silently replace plain-text with hashed version in DB
