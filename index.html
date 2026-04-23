@@ -1476,7 +1476,7 @@ async function sbRpcFallback(fn, params) {
     case 'get_my_profile': {
       const rows = await sbGet('players', `username=eq.${enc(u)}&select=*`);
       if (!rows.length) return { ok: false, error: 'invalid_session' };
-      return { ok: true, player: rows[0] };
+      return { ok: true, player: { ...rows[0], session_token: p.p_token } };
     }
     case 'list_my_picks': {
       const rows = await sbGet('pick_history', `player_username=eq.${enc(u)}&order=pick_date.desc,created_at.desc&select=*`);
