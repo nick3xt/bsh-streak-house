@@ -1153,7 +1153,7 @@ label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; display: 
   <div class="overlay-sub" id="nohit-coin-msg" style="color:var(--gold);font-size:14px;margin-top:4px;"></div>
   <div class="overlay-sub" id="nohit-next-step" style="color:var(--text-muted);font-size:13px;max-width:340px;margin-top:8px;"></div>
   <div class="overlay-actions" id="nohit-actions">
-    <button class="btn btn-primary btn-lg" id="nohit-mulligan-btn" onclick="nohitRequestMulligan()" style="display:none;">🎯 Request Mulligan</button>
+    <button class="btn btn-primary btn-lg" id="nohit-mulligan-btn" onclick="nohitUseMulligan()" style="display:none;">✅ Use Mulligan — Save My Streak!</button>
     <button class="btn btn-primary btn-lg" id="nohit-pick-next-btn" onclick="nohitPickNext()" style="display:none;">⚡ Start New Streak</button>
     <button class="btn btn-secondary btn-lg" id="nohit-ok-btn" onclick="closeNohit()">GOT IT</button>
   </div>
@@ -1175,7 +1175,7 @@ label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; display: 
       <li style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;display:flex;gap:10px;"><span style="color:var(--green);font-weight:700;min-width:20px;">4</span>Run out of credits → locked out. Contact admin!</li>
       <li style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;display:flex;gap:10px;"><span style="color:var(--green);font-weight:700;min-width:20px;">5</span>After a confirmed hit, you can pick again from preview games.</li>
       <li style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;display:flex;gap:10px;"><span style="color:var(--green);font-weight:700;min-width:20px;">6</span>Pick is locked once the game starts. No changes after first pitch.</li>
-      <li style="padding:8px 0;font-size:13px;display:flex;gap:10px;"><span style="color:var(--green);font-weight:700;min-width:20px;">7</span>Streaks of 10–29 before a bust = Mulligan eligible (ask admin).</li>
+      <li style="padding:8px 0;font-size:13px;display:flex;gap:10px;"><span style="color:var(--green);font-weight:700;min-width:20px;">7</span>Streaks of 10–29 before a bust = Mulligan eligible — offered in the No Hit screen to preserve your streak.</li>
     </ul>
     <div style="margin-top:16px;padding:12px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text-muted);">
       🏆 Get 42 consecutive hits — Jackie's number — to compete for the $15,000 Grand Prize!
@@ -1244,7 +1244,7 @@ label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; display: 
       <button class="btn btn-primary w-full" onclick="submitContactAdmin()">Send Request</button>
     </div>
     <div id="contact-mulligan-section" class="hidden" style="margin-top:16px;padding:12px;background:var(--surface2);border-radius:10px;border:1px solid rgba(255,215,0,0.3);">
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">⭐ You may be eligible for a Mulligan (streak 10–29)!</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">✅ You are eligible for a Mulligan! Your streak will be preserved.</div>
       <button class="btn btn-gold w-full" id="mulligan-req-btn" onclick="requestMulligan()">🙏 Request Mulligan</button>
     </div>
   </div>
@@ -3393,8 +3393,8 @@ function renderBOD() {
       <div class="bod-state state-pending">
         <div style="font-size:48px;">🎯</div>
         <div style="font-weight:600;">Mulligan request pending</div>
-        <div class="bod-meta" style="margin-top:4px;">Streak held at ${heldStreak} — coin already consumed. Admin will review shortly.</div>
-        <div class="bod-meta" style="margin-top:4px;">No new picks allowed until a decision.</div>
+        <div class="bod-meta" style="margin-top:4px;">Streak held at ${heldStreak} — mulligan in progress.</div>
+        <div class="bod-meta" style="margin-top:4px;">No new picks allowed while this resolves.</div>
       </div>`;
     return;
   }
@@ -4070,7 +4070,13 @@ async function sweepRecentResults() {
       pick.result = result;
       if (result === 'hit') pick._prevStreak = Math.max(0, (ar.streak || 1) - 1);
       else pick._prevStreak = 0;
-      if (typeof ar.coins === 'number') currentPlayer.coins = ar.coins;
+      if (typeof ar.coins === 'number') {
+      // Server deducted 1 coin for no_hit; enforce minimum 0
+      currentPlayer.coins = Math.max(0, ar.coins);
+    } else {
+      // Server did not return updated coins — deduct 1 client-side (min 0)
+      currentPlayer.coins = Math.max(0, (currentPlayer.coins || 0) - 1);
+    }
       if (typeof ar.streak === 'number') currentPlayer.streak = ar.streak;
       if (typeof ar.mulligan_eligible === 'boolean') currentPlayer.mulligan_eligible = ar.mulligan_eligible;
       persistSession();
@@ -4355,7 +4361,7 @@ async function checkForgotToPick() {
       if (res && res.ok) {
         // Sync currentPlayer with authoritative server state before UX
         currentPlayer.streak            = 0;
-        currentPlayer.coins             = res.coins;
+        currentPlayer.coins = typeof res.coins === 'number' ? Math.max(0, res.coins) : Math.max(0, (currentPlayer.coins || 0) - 1); // deduct 1 for no_pick (min 0)
         currentPlayer.mulligan_eligible = res.mulligan_eligible;
         currentPlayer.mulligan_used     = false;
         currentPlayer.status            = res.coins > 0 || res.mulligan_eligible ? 'active' : 'locked';
@@ -4551,6 +4557,7 @@ function _displayBang({ batterName, prevStreak, newStreak }) {
 
 // Internal — actually renders the NO HIT overlay. Do not call directly.
 function _displayNohit({ batterName, prevStreak, coinsRemaining, mulliganEligible, pending, slateClosedSnapshot }) {
+  window._nohitPrevStreak = prevStreak; // used by nohitUseMulligan
   document.getElementById('nohit-batter').textContent = batterName;
   const msgEl = document.getElementById('nohit-msg');
   const coinEl = document.getElementById('nohit-coin-msg');
@@ -4612,76 +4619,76 @@ function nohitPickNext() {
   switchTab('hotpicks');
 }
 
-// Called from the NO HIT alert's "🎯 Request Mulligan" button.
-// Coin was already consumed at the moment of no_hit (in handleLoss). Requesting
-// a mulligan RESTORES the streak to N (held) while awaiting admin review. If
-// admin approves, streak stays at N and mulligan_used flips true. If admin
-// rejects, streak resets to 0 again.
-async function nohitRequestMulligan() {
+// Called from the NO HIT alert's "✅ Use Mulligan" button.
+// Immediately accepts the mulligan: restores streak to prevStreak, sets mulligan_used=true.
+// Eligible only when streak was 10–29 AND mulligan_used===false for this streak.
+async function nohitUseMulligan() {
   const btn = document.getElementById('nohit-mulligan-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Requesting…'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Applying…'; }
   try {
-    // C6: mulligan eligibility is validated server-side by request_mulligan —
-    // refuses if streak wasn't in the 10–29 band, so a user can't fabricate
-    // a mulligan for a streak they were never on.
-    const r = await sbRpcAuth('request_mulligan');
+    const prevStreak = window._nohitPrevStreak || currentPlayer.mulligan_streak_at_loss || 0;
+    const r = await sbRpcAuth('accept_mulligan', { p_streak: prevStreak });
     if (!r || !r.ok) {
-      if (r && r.error === 'not_eligible')   showToast('Not mulligan-eligible.', 'warning');
-      else if (r && r.error === 'already_used') showToast('Mulligan already used for this streak.', 'warning');
-      else showToast('Failed to request mulligan.', 'error');
+      if (r && r.error === 'not_eligible')    showToast('Not eligible for a mulligan.', 'warning');
+      else if (r && r.error === 'already_used') showToast('Mulligan already used this streak.', 'warning');
+      else showToast('Could not apply mulligan.', 'error');
       return;
     }
-    const heldStreak = r.held;
-    currentPlayer.mulligan_requested = true;
-    currentPlayer.mulligan_eligible = true;
-    currentPlayer.streak = heldStreak;
+    const restoredStreak = (typeof r.streak === 'number') ? r.streak : prevStreak;
+    currentPlayer.streak          = restoredStreak;
+    currentPlayer.mulligan_used   = true;
+    currentPlayer.mulligan_eligible = false;
+    currentPlayer.mulligan_requested = false;
     persistSession();
     updateHdrStats();
-    showToast('Mulligan requested — admin will review.', 'success');
-    // Swap the currently-showing alert body to the "pending" state in-place
-    // (don't enqueue — the overlay is already visible and we want to update it).
-    _displayNohit({
-      batterName: document.getElementById('nohit-batter').textContent,
-      prevStreak: heldStreak,
-      coinsRemaining: currentPlayer.coins || 0,
-      mulliganEligible: false,
-      pending: true,
-      slateClosedSnapshot: isSlateClosed()
-    });
+    showToast('🎉 Mulligan applied! Streak preserved at ' + restoredStreak + '.', 'success', 5000);
+    closeNohit();
+    renderHome();
   } catch(e) {
-    showToast('Failed to request mulligan.', 'error');
+    showToast('Could not apply mulligan.', 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🎯 Request Mulligan'; }
+    if (btn) { btn.disabled = false; btn.textContent = '✅ Use Mulligan — Save My Streak!'; }
   }
 }
 
+
+
 // ============================================================
-// MULLIGAN REQUEST
+// MULLIGAN REQUEST (contact modal — mulligans are now instant from No Hit overlay)
 // ============================================================
 async function requestMulligan() {
+  // Mulligans are now applied directly from the No Hit overlay (no admin review).
+  // This button in the contact modal is kept for legacy support.
   const btn = document.getElementById('mulligan-req-btn');
-  btn.disabled = true; btn.textContent = 'Requesting…';
+  if (btn) { btn.disabled = true; btn.textContent = 'Applying…'; }
   try {
-    // C6: eligibility enforced server-side.
-    const r = await sbRpcAuth('request_mulligan');
+    const prevStreak = currentPlayer.mulligan_streak_at_loss || currentPlayer.streak || 0;
+    const r = await sbRpcAuth('accept_mulligan', { p_streak: prevStreak });
     if (!r || !r.ok) {
-      if (r && r.error === 'not_eligible')      showToast('Not eligible for a mulligan yet.', 'warning');
+      if (r && r.error === 'not_eligible')    showToast('Not eligible for a mulligan.', 'warning');
       else if (r && r.error === 'already_used') showToast('Mulligan already used this streak.', 'warning');
-      else                                       showToast('Failed to request mulligan.', 'error');
-      btn.disabled = false; btn.textContent = '🙏 Request Mulligan';
+      else showToast('Could not apply mulligan.', 'error');
       return;
     }
-    currentPlayer.mulligan_requested = true;
-    currentPlayer.mulligan_eligible  = true;
-    if (typeof r.held === 'number') currentPlayer.streak = r.held;
+    const restoredStreak = (typeof r.streak === 'number') ? r.streak : prevStreak;
+    currentPlayer.streak          = restoredStreak;
+    currentPlayer.mulligan_used   = true;
+    currentPlayer.mulligan_eligible = false;
+    currentPlayer.mulligan_requested = false;
     persistSession();
+    updateHdrStats();
     btn.classList.add('hidden');
-    showToast('Mulligan requested! Admin will review.', 'success', 5000);
+    showToast('🎉 Mulligan applied! Streak preserved at ' + restoredStreak + '.', 'success', 5000);
+    closeModal('modal-contact');
+    renderHome();
   } catch(e) {
-    showToast('Failed to request mulligan.', 'error');
-    btn.disabled = false; btn.textContent = '🙏 Request Mulligan';
+    showToast('Could not apply mulligan.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🪃 Use Mulligan'; }
   }
 }
+
+
 
 // Contact modal
 function openContactModal() {
