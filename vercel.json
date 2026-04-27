@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/nightly-processor",
+      "schedule": "0 8 * * *"
+    }
+  ]
+}
