@@ -453,3 +453,24 @@ GRANT EXECUTE ON FUNCTION public.admin_cancel_topup(text,text,text)             
 GRANT EXECUTE ON FUNCTION public.admin_mark_topup_paid(text,text,text,text,integer,text)  TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_send_inbox(text,text,text,text)                    TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.admin_assign_pick(text,text,text,text,text,text)         TO anon, authenticated;
+
+-- ── admin_stats ───────────────────────────────────────────────────
+-- Pre-existing function returned wrong field names (total_players,
+-- active_players, etc.) instead of the {ok, total, active, locked, mulligans}
+-- shape the client expects. Recreated with correct shape.
+DROP FUNCTION IF EXISTS public.admin_stats(text,text);
+CREATE FUNCTION public.admin_stats(p_username text, p_token text)
+RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $fn$
+DECLARE
+  v_total integer; v_active integer; v_locked integer; v_mulls integer;
+BEGIN
+  IF NOT EXISTS(SELECT 1 FROM players WHERE username=p_username AND session_token=p_token AND role='admin') THEN
+    RETURN json_build_object('ok',false,'error','not_authorized');
+  END IF;
+  SELECT COUNT(*) INTO v_total  FROM players WHERE role <> 'admin';
+  SELECT COUNT(*) INTO v_active FROM players WHERE role <> 'admin' AND status='active';
+  SELECT COUNT(*) INTO v_locked FROM players WHERE status='locked';
+  SELECT COUNT(*) INTO v_mulls  FROM players WHERE mulligan_requested=true;
+  RETURN json_build_object('ok',true,'total',v_total,'active',v_active,'locked',v_locked,'mulligans',v_mulls);
+END; $fn$;
+GRANT EXECUTE ON FUNCTION public.admin_stats(text,text) TO anon, authenticated;
