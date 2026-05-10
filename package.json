@@ -1,8 +1,0 @@
-{
-  "name": "bsh-streak-house",
-  "version": "1.0.0",
-  "dependencies": {
-    "web-push": "^3.6.7",
-    "@supabase/supabase-js": "^2.39.0"
-  }
-}
