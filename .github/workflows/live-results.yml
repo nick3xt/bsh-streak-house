@@ -1,0 +1,17 @@
+name: BSH Live Results
+
+on:
+  schedule:
+    - cron: '0 16-23,0-5 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping-live-results:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping live-results endpoint
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer BSH_NIGHTLY_2026" \
+            https://42streakhouse.com/api/live-results)
+          echo "Response: $STATUS"
