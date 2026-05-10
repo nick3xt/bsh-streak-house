@@ -1,12 +1,14 @@
 {
   "crons": [
+    { "path": "/api/nightly-process", "schedule": "0 11 * * *" }
+  ],
+  "headers": [
     {
-      "path": "/api/nightly-process",
-      "schedule": "0 11 * * *"
-    },
-    {
-      "path": "/api/live-results",
-      "schedule": "0 5 * * *"
+      "source": "/sw.js",
+      "headers": [
+        { "key": "Service-Worker-Allowed", "value": "/" },
+        { "key": "Cache-Control", "value": "no-cache" }
+      ]
     }
   ]
 }
