@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/live-results",
-      "schedule": "0 17-23,0-5 * * *"
+      "schedule": "0 5 * * *"
     }
   ]
 }
