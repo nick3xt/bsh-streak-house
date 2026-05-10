@@ -1,3 +1,4 @@
+// v1.1 build trigger
 // /api/live-results.js
 // Vercel Cron Job — runs hourly 17:00–05:00 UTC (10 AM – 10 PM PT)
 //
