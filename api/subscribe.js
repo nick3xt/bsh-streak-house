@@ -1,5 +1,15 @@
 'use strict';
-const { createClient } = require('@supabase/supabase-js');
+// api/subscribe.js — stores Web Push subscriptions in Supabase (no npm deps)
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
+
+function sbHeaders() {
+  return {
+    apikey: SUPABASE_KEY,
+    Authorization: `Bearer ${SUPABASE_KEY}`,
+    'Content-Type': 'application/json',
+  };
+}
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -11,21 +21,25 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid subscription object' });
   }
 
-  const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_KEY
-  );
+  // Upsert on endpoint conflict
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/push_subscriptions`, {
+    method: 'POST',
+    headers: {
+      ...sbHeaders(),
+      Prefer: 'resolution=merge-duplicates,return=minimal',
+    },
+    body: JSON.stringify({
+      endpoint,
+      p256dh: keys.p256dh,
+      auth:   keys.auth,
+      user_id: userId || null,
+    }),
+  });
 
-  const { error } = await supabase
-    .from('push_subscriptions')
-    .upsert(
-      { endpoint, p256dh: keys.p256dh, auth: keys.auth, user_id: userId || null },
-      { onConflict: 'endpoint' }
-    );
-
-  if (error) {
-    console.error('[subscribe] Supabase error:', error.message);
-    return res.status(500).json({ error: error.message });
+  if (!r.ok) {
+    const body = await r.text();
+    console.error('[subscribe] Supabase error:', r.status, body);
+    return res.status(500).json({ error: body });
   }
 
   return res.status(201).json({ ok: true });
