@@ -1,20 +1,20 @@
 // v1.1 build trigger
 // /api/live-results.js
-// Vercel Cron Job — runs hourly 17:00–05:00 UTC (10 AM – 10 PM PT)
+// Vercel Cron Job â runs hourly 17:00â05:00 UTC (10 AM â 10 PM PT)
 //
 // Resolves TODAY's pending picks mid-game as soon as a hit is detected
 // on the MLB live feed. Designed to run alongside /api/nightly-process:
-//   • HIT confirmed  → mark pick 'hit', increment streak immediately
-//   • NO HIT + Final → mark pick 'no_hit', reset streak
+//   â¢ HIT confirmed  â mark pick 'hit', increment streak immediately
+//   â¢ NO HIT + Final â mark pick 'no_hit', reset streak
 //     (coin/mulligan settlement deferred to nightly at 04:00 PT)
-//   • Still in-progress → leave pending (next hourly run will catch it)
+//   â¢ Still in-progress â leave pending (next hourly run will catch it)
 //
 // Auth: same BSH_CRON_SECRET pattern as nightly-process.js
 //
 // Env vars required:
-//   SUPABASE_URL              — Supabase project URL
-//   SUPABASE_SERVICE_ROLE_KEY — Service role key (bypasses RLS)
-//   BSH_CRON_SECRET           — Must match Authorization: Bearer <value>
+//   SUPABASE_URL              â Supabase project URL
+//   SUPABASE_SERVICE_ROLE_KEY â Service role key (bypasses RLS)
+//   BSH_CRON_SECRET           â Must match Authorization: Bearer <value>
 'use strict';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://heykwxkyvbzffkhgrqgf.supabase.co';
@@ -53,9 +53,9 @@ async function sbPatch(table, qs, body) {
 }
 
 // Identical hit-detection logic to nightly-process.js:
-//   'hit'    — batter has ≥1 hit (game Live or Final)
-//   'no_hit' — batter has 0 hits AND game is Final
-//   'pending' — game not yet started, postponed, or API error
+//   'hit'    â batter has â¥1 hit (game Live or Final)
+//   'no_hit' â batter has 0 hits AND game is Final
+//   'pending' â game not yet started, postponed, or API error
 async function getHitResult(gamePk, batterId) {
   if (!gamePk || String(gamePk) === '0') return 'pending';
   let data;
@@ -140,13 +140,13 @@ module.exports = async function handler(req, res) {
       // Re-read to guard against a concurrent nightly run having resolved it
       const [fresh] = await sbGet('pick_history', `id=eq.${pick.id}&select=id,result`);
       if (!fresh || fresh.result !== 'pending') {
-        console.log(`[live-results] pick ${pick.id} already resolved — skipping`);
+        console.log(`[live-results] pick ${pick.id} already resolved â skipping`);
         summary.skipped++;
         continue;
       }
 
       const result = await getHitResult(pick.game_pk, pick.batter_id);
-      console.log(`[live-results] pick ${pick.id} (${pick.batter_name}) → ${result}`);
+      console.log(`[live-results] pick ${pick.id} (${pick.batter_name}) â ${result}`);
 
       if (result === 'pending') {
         summary.still_pending++;
@@ -173,10 +173,21 @@ module.exports = async function handler(req, res) {
         if (prevStreak === 0) patch.mulligan_used = false;
         await sbPatch('players', `username=eq.${encodeURIComponent(pick.player_username)}`, patch);
         summary.hits++;
-        console.log(`[live-results] HIT — ${pick.player_username} streak ${prevStreak} → ${newStreak}`);
+    // [BSH Push] Notify user of HIT result — fire-and-forget
+    fetch('https://42streakhouse.com/api/send-push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: '\u2705 HIT! ' + pick.batter_name,
+        body: 'Your streak continues! Day ' + newStreak + ' in the books.',
+        url: 'https://42streakhouse.com',
+        userId: pick.player_username
+      })
+    }).catch(e => console.warn('[push] HIT error:', e.message));
+        console.log(`[live-results] HIT â ${pick.player_username} streak ${prevStreak} â ${newStreak}`);
 
       } else {
-        // no_hit — game is Final. Reset streak now so players see the result
+        // no_hit â game is Final. Reset streak now so players see the result
         // immediately. Coin deduction + mulligan settlement runs via nightly-process
         // at 04:00 PT using the same idempotency guard (pick no longer pending).
         // NOTE: nightly will NOT re-process this pick since result != 'pending'.
@@ -199,11 +210,22 @@ module.exports = async function handler(req, res) {
         }
         await sbPatch('players', `username=eq.${encodeURIComponent(pick.player_username)}`, patch);
         summary.no_hits++;
-        console.log(`[live-results] NO HIT — ${pick.player_username} streak ${prevStreak} → 0, coins → ${newCoins}`);
+    // [BSH Push] Notify user of NO_HIT result — fire-and-forget
+    fetch('https://42streakhouse.com/api/send-push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: '\u274c No hit for ' + pick.batter_name,
+        body: 'Streak resets. Pick a new player tomorrow.',
+        url: 'https://42streakhouse.com',
+        userId: pick.player_username
+      })
+    }).catch(e => console.warn('[push] NO_HIT error:', e.message));
+        console.log(`[live-results] NO HIT â ${pick.player_username} streak ${prevStreak} â 0, coins â ${newCoins}`);
       }
     } catch (e) {
       const msg = `pick ${pick.id} (${pick.player_username}): ${e.message}`;
-      console.error(`[live-results] Error — ${msg}`);
+      console.error(`[live-results] Error â ${msg}`);
       summary.errors.push(msg);
     }
   }
