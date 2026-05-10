@@ -5705,5 +5705,247 @@ async function assignPick(playerId, playerName, teamAbbr) {
   }
 })();
 </script>
+
+<style id="bsh-upgrades-styles">
+@keyframes bshPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.3)} }
+@keyframes bshSlideUp { from{transform:translateY(70px) scale(0.92);opacity:0} to{transform:translateY(0) scale(1);opacity:1} }
+#bsh-levelup-overlay {
+  display:none;position:fixed;inset:0;z-index:10000;
+  background:rgba(0,0,0,0.92);
+  align-items:center;justify-content:center;flex-direction:column;
+}
+#bsh-levelup-card {
+  text-align:center;
+  animation:bshSlideUp 0.5s cubic-bezier(.22,.68,0,1.2) both;
+  padding:40px 28px;max-width:380px;width:90%;
+}
+#bsh-levelup-icon {
+  font-size:84px;line-height:1;display:block;
+  animation:bshPulse 3s ease-in-out infinite;
+  margin-bottom:18px;
+}
+#bsh-levelup-name {
+  font-size:34px;font-weight:900;margin:0 0 10px;
+  text-shadow:0 0 24px currentColor;letter-spacing:3px;font-family:inherit;
+}
+#bsh-levelup-streak {
+  font-size:20px;color:#fff;margin-bottom:28px;font-weight:600;letter-spacing:1px;
+}
+#bsh-levelup-dismiss {
+  background:linear-gradient(135deg,#00e676,#00b04f);
+  color:#000;font-weight:900;font-size:17px;
+  padding:14px 44px;border:none;border-radius:50px;cursor:pointer;
+  letter-spacing:1px;transition:transform 0.15s,box-shadow 0.15s;
+  box-shadow:0 4px 20px rgba(0,230,118,0.35);
+}
+#bsh-levelup-dismiss:hover { transform:scale(1.05); }
+#bsh-share-card {
+  margin-top:22px;
+  background:linear-gradient(145deg,#12121f,#1a1a2e);
+  border:1px solid rgba(255,255,255,0.1);border-radius:16px;
+  padding:20px 28px;display:none;
+  box-shadow:0 8px 32px rgba(0,0,0,0.5);
+}
+#bsh-share-player { font-size:15px;color:#ccc;margin-bottom:8px; }
+#bsh-share-badge  { font-size:30px;font-weight:900;margin-bottom:4px; }
+#bsh-share-tier   { font-size:12px;font-weight:700;letter-spacing:3px;margin-bottom:10px;opacity:0.9; }
+#bsh-share-date   { font-size:11px;color:#666;margin-bottom:14px; }
+#bsh-share-footer { font-size:10px;color:#444;margin-bottom:12px; }
+#bsh-share-action {
+  width:100%;background:linear-gradient(135deg,#1da1f2,#0d8ecf);
+  color:#fff;font-weight:700;font-size:14px;
+  padding:11px 0;border:none;border-radius:50px;cursor:pointer;
+  transition:transform 0.15s;
+}
+#bsh-share-action:hover { transform:scale(1.03); }
+#bsh-bell-btn {
+  position:fixed;bottom:20px;right:20px;width:46px;height:46px;
+  border-radius:50%;background:rgba(20,20,32,0.9);
+  border:1px solid rgba(255,255,255,0.18);font-size:20px;
+  cursor:pointer;z-index:9998;backdrop-filter:blur(10px);
+  transition:transform 0.2s,box-shadow 0.2s;display:none;
+  box-shadow:0 2px 12px rgba(0,0,0,0.4);
+}
+#bsh-bell-btn:hover { transform:scale(1.12);box-shadow:0 4px 18px rgba(0,0,0,0.5); }
+</style>
+<!-- BSH Upgrades: Level-Up Modal + Share Card + Push Notifications -->
+<div id="bsh-levelup-overlay" role="dialog" aria-modal="true">
+  <div id="bsh-levelup-card">
+    <span id="bsh-levelup-icon"></span>
+    <div  id="bsh-levelup-name"></div>
+    <div  id="bsh-levelup-streak"></div>
+    <button id="bsh-levelup-dismiss" onclick="bshDismissLevelUp()">LET'S GO &rarr;</button>
+    <div id="bsh-share-card">
+      <div style="color:#ffd700;font-size:19px;font-weight:900;margin-bottom:6px;">&#x1F3C6; 42 STREAK HOUSE</div>
+      <div id="bsh-share-player"></div>
+      <div id="bsh-share-badge"></div>
+      <div id="bsh-share-tier"></div>
+      <div id="bsh-share-date"></div>
+      <div id="bsh-share-footer">42streakhouse.com</div>
+      <button id="bsh-share-action" onclick="bshShareCard()">&#x1F4E4; Share Your Streak</button>
+    </div>
+  </div>
+</div>
+<button id="bsh-bell-btn" title="Enable push notifications" onclick="bshTogglePush()"></button>
+<script id="bsh-upgrades-script">
+// ============================================================
+// BSH UPGRADES v1.0 — Level-Up Modal + Share Card + Push
+// ============================================================
+const BSH_VAPID_PUBLIC = 'BCZ30nDna_ZDjDNzpBdBVmjjD9aPI2LEaEA33KUpN1h-cEiArWYJBL6fvlyCJKKiOdt0xh8VNiVS0i5f8eMqzt0';
+
+const BSH_MILESTONES = {
+  5:  { name: 'HEATING UP',      icon: '\uD83D\uDD25',             color: '#ff6b35' },
+  10: { name: 'ON FIRE',         icon: '\uD83D\uDD25\uD83D\uDD25', color: '#ff4500' },
+  15: { name: 'SCORCHER',        icon: '\u26A1',                    color: '#ffd700' },
+  20: { name: 'LEGENDARY',       icon: '\uD83D\uDC80',             color: '#9b59b6' },
+  25: { name: 'MYTHIC',          icon: '\uD83D\uDC51',             color: '#e74c3c' },
+  30: { name: 'IMMORTAL',        icon: '\uD83C\uDF1F',             color: '#00d4ff' },
+  35: { name: 'UNTOUCHABLE',     icon: '\uD83D\uDC10',             color: '#2ecc71' },
+  42: { name: "JACKIE'S NUMBER", icon: '\uD83C\uDFC6',             color: '#ffd700' }
+};
+
+let _bshMilestone = null;
+
+function bshShowLevelUp(streak, playerName) {
+  const m = BSH_MILESTONES[streak];
+  if (!m) return;
+  _bshMilestone = { streak, playerName, name: m.name };
+
+  document.getElementById('bsh-levelup-icon').textContent = m.icon;
+  const nm = document.getElementById('bsh-levelup-name');
+  nm.textContent = m.name; nm.style.color = m.color;
+  document.getElementById('bsh-levelup-streak').textContent =
+    'STREAK: ' + streak + ' DAYS \uD83D\uDD25';
+
+  // Populate share card
+  document.getElementById('bsh-share-player').textContent = playerName;
+  const badge = document.getElementById('bsh-share-badge');
+  badge.textContent = 'DAY ' + streak; badge.style.color = m.color;
+  const tier = document.getElementById('bsh-share-tier');
+  tier.textContent = m.name; tier.style.color = m.color;
+  document.getElementById('bsh-share-date').textContent =
+    new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+  document.getElementById('bsh-share-card').style.display = 'block';
+
+  // Reset card animation so it re-fires each time
+  const card = document.getElementById('bsh-levelup-card');
+  card.style.animation = 'none';
+  requestAnimationFrame(() => { card.style.animation = ''; });
+
+  const ol = document.getElementById('bsh-levelup-overlay');
+  ol.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function bshDismissLevelUp() {
+  document.getElementById('bsh-levelup-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+  _bshMilestone = null;
+}
+
+async function bshShareCard() {
+  if (!_bshMilestone) return;
+  const { streak, playerName, name } = _bshMilestone;
+  const text = 'Day ' + streak + ' on 42 Streak House \uD83D\uDD25 Just hit ' + name +
+    ' with ' + playerName + '. Can I reach 42? https://42streakhouse.com';
+  if (navigator.share) {
+    await navigator.share({ title: '42 Streak House', text }).catch(function(){});
+  } else {
+    try { await navigator.clipboard.writeText(text); } catch(_) {}
+    alert('Copied to clipboard!');
+  }
+}
+
+// Patch _displayBang: after confetti fires (3s), check for milestone
+(function patchBang() {
+  if (typeof _displayBang !== 'function') { setTimeout(patchBang, 150); return; }
+  var _orig = _displayBang;
+  window._displayBang = function(payload) {
+    _orig.call(this, payload);
+    if (BSH_MILESTONES[payload.newStreak]) {
+      setTimeout(function() { bshShowLevelUp(payload.newStreak, payload.batterName); }, 3200);
+    }
+  };
+})();
+
+// Close overlay on backdrop click
+document.getElementById('bsh-levelup-overlay').addEventListener('click', function(e) {
+  if (e.target === this) bshDismissLevelUp();
+});
+
+// ===== PUSH NOTIFICATIONS =====
+function bshUrlB64ToUint8Array(b64) {
+  var pad = '='.repeat((4 - b64.length % 4) % 4);
+  var raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  var arr = new Uint8Array(raw.length);
+  for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+
+var _bshPushReg = null, _bshPushSub = null;
+
+function bshUpdateBell(subscribed) {
+  var btn = document.getElementById('bsh-bell-btn');
+  if (!btn) return;
+  btn.textContent = subscribed ? '\uD83D\uDD15' : '\uD83D\uDD14';
+  btn.title = subscribed ? 'Disable push notifications' : 'Enable push notifications';
+}
+
+async function bshInitPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    _bshPushReg = await navigator.serviceWorker.register('/sw.js');
+    _bshPushSub = await _bshPushReg.pushManager.getSubscription();
+    bshUpdateBell(!!_bshPushSub);
+  } catch(e) { console.warn('[bsh] SW init:', e.message); }
+}
+
+async function bshTogglePush() {
+  if (!_bshPushReg) { await bshInitPush(); }
+  if (!_bshPushReg) return;
+  if (_bshPushSub) {
+    try { await _bshPushSub.unsubscribe(); } catch(_) {}
+    _bshPushSub = null;
+    bshUpdateBell(false);
+    return;
+  }
+  var perm = await Notification.requestPermission();
+  if (perm !== 'granted') return;
+  try {
+    var sub = await _bshPushReg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: bshUrlB64ToUint8Array(BSH_VAPID_PUBLIC)
+    });
+    _bshPushSub = sub;
+    bshUpdateBell(true);
+    var j = sub.toJSON();
+    fetch('/api/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        endpoint: sub.endpoint,
+        keys: { p256dh: (j.keys || {}).p256dh, auth: (j.keys || {}).auth },
+        userId: (window.currentPlayer || {}).username || null
+      })
+    }).catch(function(e) { console.warn('[bsh] subscribe error:', e.message); });
+  } catch(e) { console.warn('[bsh] push subscribe error:', e.message); }
+}
+
+// Show bell button after user logs in — patch enterApp
+(function patchEnterApp() {
+  if (typeof enterApp !== 'function') { setTimeout(patchEnterApp, 150); return; }
+  var _orig = enterApp;
+  window.enterApp = async function() {
+    var result = await _orig.apply(this, arguments);
+    var btn = document.getElementById('bsh-bell-btn');
+    if (btn) btn.style.display = '';
+    bshUpdateBell(!!_bshPushSub);
+    return result;
+  };
+})();
+
+// Boot SW immediately
+bshInitPush();
+</script>
 </body>
 </html>
