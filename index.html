@@ -5794,6 +5794,8 @@ async function assignPick(playerId, playerName, teamAbbr) {
 const BSH_VAPID_PUBLIC = 'BCZ30nDna_ZDjDNzpBdBVmjjD9aPI2LEaEA33KUpN1h-cEiArWYJBL6fvlyCJKKiOdt0xh8VNiVS0i5f8eMqzt0';
 
 const BSH_MILESTONES = {
+  1:  { name: 'FIRST HIT',        icon: '\u26BE',                    color: '#4caf50' },
+  3:  { name: 'ON A ROLL',        icon: '\uD83D\uDD25',             color: '#ff9800' },
   5:  { name: 'HEATING UP',      icon: '\uD83D\uDD25',             color: '#ff6b35' },
   10: { name: 'ON FIRE',         icon: '\uD83D\uDD25\uD83D\uDD25', color: '#ff4500' },
   15: { name: 'SCORCHER',        icon: '\u26A1',                    color: '#ffd700' },
@@ -5887,7 +5889,7 @@ var _bshPushReg = null, _bshPushSub = null;
 function bshUpdateBell(subscribed) {
   var btn = document.getElementById('bsh-bell-btn');
   if (!btn) return;
-  btn.textContent = subscribed ? '\uD83D\uDD15' : '\uD83D\uDD14';
+  btn.textContent = subscribed ? '\uD83D\uDD14' : '\uD83D\uDD15';
   btn.title = subscribed ? 'Disable push notifications' : 'Enable push notifications';
 }
 
