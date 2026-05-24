@@ -1728,7 +1728,9 @@ async function sbRpcFallback(fn, params) {
       const tgt = p.p_target;
       const pls = await sbGet('players', `username=eq.${enc(tgt)}&select=coins`);
       const newCoins = (pls[0]?.coins || 0) + (p.p_coins || 0);
-      await sbPatch('players', `username=eq.${enc(tgt)}`, { coins: newCoins });
+      const _coinPatch = { coins: newCoins };
+      if (newCoins > 0 && pls[0]?.status === 'locked') _coinPatch.status = 'active';
+      await sbPatch('players', `username=eq.${enc(tgt)}`, _coinPatch);
       if (p.p_request_id) await sbPatch('coin_purchase_requests', `id=eq.${p.p_request_id}`, { status: 'paid' }).catch(()=>{});
       if (p.p_inbox_id)  await sbPatch('inbox', `id=eq.${p.p_inbox_id}`, { read: true }).catch(()=>{});
       return { ok: true };
