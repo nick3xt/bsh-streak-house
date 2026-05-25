@@ -1153,7 +1153,7 @@ label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; display: 
   <div class="overlay-sub" id="nohit-coin-msg" style="color:var(--gold);font-size:14px;margin-top:4px;"></div>
   <div class="overlay-sub" id="nohit-next-step" style="color:var(--text-muted);font-size:13px;max-width:340px;margin-top:8px;"></div>
   <div class="overlay-actions" id="nohit-actions">
-    <button class="btn btn-primary btn-lg" id="nohit-mulligan-btn" onclick="nohitUseMulligan()" style="display:none;">✅ Use Mulligan — Save My Streak!</button>
+    <button class="btn btn-primary btn-lg" id="nohit-mulligan-btn" onclick="nohitRequestMulligan()" style="display:none;">🎯 Request Mulligan</button>
     <button class="btn btn-primary btn-lg" id="nohit-pick-next-btn" onclick="nohitPickNext()" style="display:none;">⚡ Start New Streak</button>
     <button class="btn btn-secondary btn-lg" id="nohit-ok-btn" onclick="closeNohit()">GOT IT</button>
   </div>
@@ -1175,7 +1175,7 @@ label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; display: 
       <li style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;display:flex;gap:10px;"><span style="color:var(--green);font-weight:700;min-width:20px;">4</span>Run out of credits → locked out. Contact admin!</li>
       <li style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;display:flex;gap:10px;"><span style="color:var(--green);font-weight:700;min-width:20px;">5</span>After a confirmed hit, you can pick again from preview games.</li>
       <li style="padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;display:flex;gap:10px;"><span style="color:var(--green);font-weight:700;min-width:20px;">6</span>Pick is locked once the game starts. No changes after first pitch.</li>
-      <li style="padding:8px 0;font-size:13px;display:flex;gap:10px;"><span style="color:var(--green);font-weight:700;min-width:20px;">7</span>Streaks of 10–29 before a bust = Mulligan eligible — offered in the No Hit screen to preserve your streak.</li>
+      <li style="padding:8px 0;font-size:13px;display:flex;gap:10px;"><span style="color:var(--green);font-weight:700;min-width:20px;">7</span>Streaks of 10–29 before a bust = Mulligan eligible (ask admin).</li>
     </ul>
     <div style="margin-top:16px;padding:12px;background:var(--surface2);border-radius:8px;font-size:12px;color:var(--text-muted);">
       🏆 Get 42 consecutive hits — Jackie's number — to compete for the $15,000 Grand Prize!
@@ -1244,7 +1244,7 @@ label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; display: 
       <button class="btn btn-primary w-full" onclick="submitContactAdmin()">Send Request</button>
     </div>
     <div id="contact-mulligan-section" class="hidden" style="margin-top:16px;padding:12px;background:var(--surface2);border-radius:10px;border:1px solid rgba(255,215,0,0.3);">
-      <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">✅ You are eligible for a Mulligan! Your streak will be preserved.</div>
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">⭐ You may be eligible for a Mulligan (streak 10–29)!</div>
       <button class="btn btn-gold w-full" id="mulligan-req-btn" onclick="requestMulligan()">🙏 Request Mulligan</button>
     </div>
   </div>
@@ -1342,7 +1342,7 @@ label { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; display: 
 // CONFIG & STATE
 // ============================================================
 const SUPABASE_URL = 'https://heykwxkyvbzffkhgrqgf.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhleWt3eGt5dmJ6ZmZraGdycWdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwMDc4NDYsImV4cCI6MjA5MDU4Mzg0Nn0.0tYXzMr51TW-mgmMvmvbKDFsH4xkn5mf34w-EKqN8yc';
+const SUPABASE_KEY = 'sb_publishable_KvxJYevSYKP1Na_de5RCTQ_G9dDi0_L';
 const MLB = 'https://statsapi.mlb.com/api/v1';
 
 let currentPlayer = null;
@@ -1476,7 +1476,7 @@ async function sbRpcFallback(fn, params) {
     case 'get_my_profile': {
       const rows = await sbGet('players', `username=eq.${enc(u)}&select=*`);
       if (!rows.length) return { ok: false, error: 'invalid_session' };
-      return { ok: true, player: { ...rows[0], session_token: p.p_token } };
+      return { ok: true, player: rows[0] };
     }
     case 'list_my_picks': {
       const rows = await sbGet('pick_history', `player_username=eq.${enc(u)}&order=pick_date.desc,created_at.desc&select=*`);
@@ -1606,11 +1606,6 @@ async function sbRpcFallback(fn, params) {
         const patch = v.is_bonus
           ? { streak: newStreak }
           : { streak: newStreak, today_pick: null, today_pick_id: null, today_pick_gamepk: null, pick_locked_at: null };
-        // New streak starting (pl.streak was 0): clear mulligan_used so the
-        // player is eligible for a mulligan on this fresh streak. Fixes the case
-        // where a prior grantMulligan left mulligan_used=true but zeroed the streak,
-        // blocking the mulligan offer on the next streak's no_hit (JIMMY bug).
-        if ((pl.streak || 0) === 0) patch.mulligan_used = false;
         await sbPatch('players', `username=eq.${enc(u)}`, patch);
         return { ok: true, result: 'hit', streak: newStreak };
       }
@@ -1726,11 +1721,14 @@ async function sbRpcFallback(fn, params) {
     }
     case 'admin_mark_topup_paid': {
       const tgt = p.p_target;
-      const pls = await sbGet('players', `username=eq.${enc(tgt)}&select=coins`);
+      const pls = await sbGet('players', `username=eq.${enc(tgt)}&select=coins,status`);
       const newCoins = (pls[0]?.coins || 0) + (p.p_coins || 0);
-      const _coinPatch = { coins: newCoins };
-      if (newCoins > 0 && pls[0]?.status === 'locked') _coinPatch.status = 'active';
-      await sbPatch('players', `username=eq.${enc(tgt)}`, _coinPatch);
+      // FIX (2026-05-24): also restore status→active when coins are added back.
+      // Previously, a player whose coins hit 0 got status='locked', but the
+      // topup handler only patched coins — leaving them locked even after payment.
+      const coinPatch = { coins: newCoins };
+      if (newCoins > 0 && pls[0]?.status === 'locked') coinPatch.status = 'active';
+      await sbPatch('players', `username=eq.${enc(tgt)}`, coinPatch);
       if (p.p_request_id) await sbPatch('coin_purchase_requests', `id=eq.${p.p_request_id}`, { status: 'paid' }).catch(()=>{});
       if (p.p_inbox_id)  await sbPatch('inbox', `id=eq.${p.p_inbox_id}`, { read: true }).catch(()=>{});
       return { ok: true };
@@ -3395,25 +3393,39 @@ function renderBOD() {
       <div class="bod-state state-pending">
         <div style="font-size:48px;">🎯</div>
         <div style="font-weight:600;">Mulligan request pending</div>
-        <div class="bod-meta" style="margin-top:4px;">Streak held at ${heldStreak} — mulligan in progress.</div>
-        <div class="bod-meta" style="margin-top:4px;">No new picks allowed while this resolves.</div>
+        <div class="bod-meta" style="margin-top:4px;">Streak held at ${heldStreak} — coin already consumed. Admin will review shortly.</div>
+        <div class="bod-meta" style="margin-top:4px;">No new picks allowed until a decision.</div>
       </div>`;
     return;
   }
 
-  // VIEW-ONLY MODE: out of coins. Highest-priority state — block pick UI.
+  // VIEW-ONLY MODE: account locked OR out of coins — block pick UI.
+  // FIX (2026-05-24): distinguish admin-lock (status='locked') from out-of-coins
+  // so we never show "Out of coins" to someone who actually has coins.
   if (isViewOnlyMode() && !mainPick) {
     badge.innerHTML = '<span class="badge badge-locked">VIEW ONLY</span>';
-    bod.innerHTML = `
-      <div class="bod-state state-locked">
-        <div style="font-size:48px;">💰</div>
-        <div style="font-weight:600;">Out of coins</div>
-        <div class="bod-meta" style="margin-top:4px;">Top up to rejoin the streak. You can still browse today's games and the leaderboard.</div>
-        <div style="display:flex;gap:8px;margin-top:10px;">
-          <button class="btn btn-gold btn-sm" onclick="openTopupModal()">🪙 Top Up</button>
-          <button class="btn btn-secondary btn-sm" onclick="openModal('modal-contact')">📞 Contact Admin</button>
-        </div>
-      </div>`;
+    if (currentPlayer.status === 'locked') {
+      bod.innerHTML = `
+        <div class="bod-state state-locked">
+          <div style="font-size:48px;">🔒</div>
+          <div style="font-weight:600;">Account locked</div>
+          <div class="bod-meta" style="margin-top:4px;">Contact your admin to get back in the game.</div>
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <button class="btn btn-secondary btn-sm" onclick="openModal('modal-contact')">📞 Contact Admin</button>
+          </div>
+        </div>`;
+    } else {
+      bod.innerHTML = `
+        <div class="bod-state state-locked">
+          <div style="font-size:48px;">💰</div>
+          <div style="font-weight:600;">Out of coins</div>
+          <div class="bod-meta" style="margin-top:4px;">Top up to rejoin the streak. You can still browse today's games and the leaderboard.</div>
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <button class="btn btn-gold btn-sm" onclick="openTopupModal()">🪙 Top Up</button>
+            <button class="btn btn-secondary btn-sm" onclick="openModal('modal-contact')">📞 Contact Admin</button>
+          </div>
+        </div>`;
+    }
     return;
   }
 
@@ -4072,13 +4084,7 @@ async function sweepRecentResults() {
       pick.result = result;
       if (result === 'hit') pick._prevStreak = Math.max(0, (ar.streak || 1) - 1);
       else pick._prevStreak = 0;
-      if (typeof ar.coins === 'number') {
-      // Server deducted 1 coin for no_hit; enforce minimum 0
-      currentPlayer.coins = Math.max(0, ar.coins);
-    } else {
-      // Server did not return updated coins — deduct 1 client-side (min 0)
-      currentPlayer.coins = Math.max(0, (currentPlayer.coins || 0) - 1);
-    }
+      if (typeof ar.coins === 'number') currentPlayer.coins = ar.coins;
       if (typeof ar.streak === 'number') currentPlayer.streak = ar.streak;
       if (typeof ar.mulligan_eligible === 'boolean') currentPlayer.mulligan_eligible = ar.mulligan_eligible;
       persistSession();
@@ -4232,7 +4238,6 @@ async function checkPickResults() {
         currentPlayer.mulligan_used     = false;
         persistSession();
         pick._prevStreak = _prevStreakForSnap;
-        _resolvedThisRound = true;
         // Still run the warning-banner side-effect from handleLoss (coin
         // banner on 0-coin state) — but route the alert itself through the
         // canonical funnel below so the single seen/dispatch path is used.
@@ -4251,11 +4256,10 @@ async function checkPickResults() {
     // localStorage. Refreshes player row first so streak/coins/mulligan
     // are accurate before rendering.
     let _sweepFiredAny = false;
-    let _resolvedThisRound = false;
     for (const pick of todayPicks) {
       if (!pick.result || pick.result === 'pending') continue;
       if (wasAlertSeen(pick.id, pick.result)) continue;
-      if (!_sweepFiredAny && !_resolvedThisRound) {
+      if (!_sweepFiredAny) {
         // Re-pull authoritative player row once per sweep (not per pick).
         try {
           const fresh = await sbRpcAuth('get_my_profile');
@@ -4363,7 +4367,7 @@ async function checkForgotToPick() {
       if (res && res.ok) {
         // Sync currentPlayer with authoritative server state before UX
         currentPlayer.streak            = 0;
-        currentPlayer.coins = typeof res.coins === 'number' ? Math.max(0, res.coins) : Math.max(0, (currentPlayer.coins || 0) - 1); // deduct 1 for no_pick (min 0)
+        currentPlayer.coins             = res.coins;
         currentPlayer.mulligan_eligible = res.mulligan_eligible;
         currentPlayer.mulligan_used     = false;
         currentPlayer.status            = res.coins > 0 || res.mulligan_eligible ? 'active' : 'locked';
@@ -4559,7 +4563,6 @@ function _displayBang({ batterName, prevStreak, newStreak }) {
 
 // Internal — actually renders the NO HIT overlay. Do not call directly.
 function _displayNohit({ batterName, prevStreak, coinsRemaining, mulliganEligible, pending, slateClosedSnapshot }) {
-  window._nohitPrevStreak = prevStreak; // used by nohitUseMulligan
   document.getElementById('nohit-batter').textContent = batterName;
   const msgEl = document.getElementById('nohit-msg');
   const coinEl = document.getElementById('nohit-coin-msg');
@@ -4621,76 +4624,76 @@ function nohitPickNext() {
   switchTab('hotpicks');
 }
 
-// Called from the NO HIT alert's "✅ Use Mulligan" button.
-// Immediately accepts the mulligan: restores streak to prevStreak, sets mulligan_used=true.
-// Eligible only when streak was 10–29 AND mulligan_used===false for this streak.
-async function nohitUseMulligan() {
+// Called from the NO HIT alert's "🎯 Request Mulligan" button.
+// Coin was already consumed at the moment of no_hit (in handleLoss). Requesting
+// a mulligan RESTORES the streak to N (held) while awaiting admin review. If
+// admin approves, streak stays at N and mulligan_used flips true. If admin
+// rejects, streak resets to 0 again.
+async function nohitRequestMulligan() {
   const btn = document.getElementById('nohit-mulligan-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Applying…'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Requesting…'; }
   try {
-    const prevStreak = window._nohitPrevStreak || currentPlayer.mulligan_streak_at_loss || 0;
-    const r = await sbRpcAuth('accept_mulligan', { p_streak: prevStreak });
+    // C6: mulligan eligibility is validated server-side by request_mulligan —
+    // refuses if streak wasn't in the 10–29 band, so a user can't fabricate
+    // a mulligan for a streak they were never on.
+    const r = await sbRpcAuth('request_mulligan');
     if (!r || !r.ok) {
-      if (r && r.error === 'not_eligible')    showToast('Not eligible for a mulligan.', 'warning');
-      else if (r && r.error === 'already_used') showToast('Mulligan already used this streak.', 'warning');
-      else showToast('Could not apply mulligan.', 'error');
+      if (r && r.error === 'not_eligible')   showToast('Not mulligan-eligible.', 'warning');
+      else if (r && r.error === 'already_used') showToast('Mulligan already used for this streak.', 'warning');
+      else showToast('Failed to request mulligan.', 'error');
       return;
     }
-    const restoredStreak = (typeof r.streak === 'number') ? r.streak : prevStreak;
-    currentPlayer.streak          = restoredStreak;
-    currentPlayer.mulligan_used   = true;
-    currentPlayer.mulligan_eligible = false;
-    currentPlayer.mulligan_requested = false;
+    const heldStreak = r.held;
+    currentPlayer.mulligan_requested = true;
+    currentPlayer.mulligan_eligible = true;
+    currentPlayer.streak = heldStreak;
     persistSession();
     updateHdrStats();
-    showToast('🎉 Mulligan applied! Streak preserved at ' + restoredStreak + '.', 'success', 5000);
-    closeNohit();
-    renderHome();
+    showToast('Mulligan requested — admin will review.', 'success');
+    // Swap the currently-showing alert body to the "pending" state in-place
+    // (don't enqueue — the overlay is already visible and we want to update it).
+    _displayNohit({
+      batterName: document.getElementById('nohit-batter').textContent,
+      prevStreak: heldStreak,
+      coinsRemaining: currentPlayer.coins || 0,
+      mulliganEligible: false,
+      pending: true,
+      slateClosedSnapshot: isSlateClosed()
+    });
   } catch(e) {
-    showToast('Could not apply mulligan.', 'error');
+    showToast('Failed to request mulligan.', 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '✅ Use Mulligan — Save My Streak!'; }
+    if (btn) { btn.disabled = false; btn.textContent = '🎯 Request Mulligan'; }
   }
 }
 
-
-
 // ============================================================
-// MULLIGAN REQUEST (contact modal — mulligans are now instant from No Hit overlay)
+// MULLIGAN REQUEST
 // ============================================================
 async function requestMulligan() {
-  // Mulligans are now applied directly from the No Hit overlay (no admin review).
-  // This button in the contact modal is kept for legacy support.
   const btn = document.getElementById('mulligan-req-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Applying…'; }
+  btn.disabled = true; btn.textContent = 'Requesting…';
   try {
-    const prevStreak = currentPlayer.mulligan_streak_at_loss || currentPlayer.streak || 0;
-    const r = await sbRpcAuth('accept_mulligan', { p_streak: prevStreak });
+    // C6: eligibility enforced server-side.
+    const r = await sbRpcAuth('request_mulligan');
     if (!r || !r.ok) {
-      if (r && r.error === 'not_eligible')    showToast('Not eligible for a mulligan.', 'warning');
+      if (r && r.error === 'not_eligible')      showToast('Not eligible for a mulligan yet.', 'warning');
       else if (r && r.error === 'already_used') showToast('Mulligan already used this streak.', 'warning');
-      else showToast('Could not apply mulligan.', 'error');
+      else                                       showToast('Failed to request mulligan.', 'error');
+      btn.disabled = false; btn.textContent = '🙏 Request Mulligan';
       return;
     }
-    const restoredStreak = (typeof r.streak === 'number') ? r.streak : prevStreak;
-    currentPlayer.streak          = restoredStreak;
-    currentPlayer.mulligan_used   = true;
-    currentPlayer.mulligan_eligible = false;
-    currentPlayer.mulligan_requested = false;
+    currentPlayer.mulligan_requested = true;
+    currentPlayer.mulligan_eligible  = true;
+    if (typeof r.held === 'number') currentPlayer.streak = r.held;
     persistSession();
-    updateHdrStats();
     btn.classList.add('hidden');
-    showToast('🎉 Mulligan applied! Streak preserved at ' + restoredStreak + '.', 'success', 5000);
-    closeModal('modal-contact');
-    renderHome();
+    showToast('Mulligan requested! Admin will review.', 'success', 5000);
   } catch(e) {
-    showToast('Could not apply mulligan.', 'error');
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🪃 Use Mulligan'; }
+    showToast('Failed to request mulligan.', 'error');
+    btn.disabled = false; btn.textContent = '🙏 Request Mulligan';
   }
 }
-
-
 
 // Contact modal
 function openContactModal() {
@@ -5179,10 +5182,7 @@ async function clearTodayPick(username) {
 async function grantMulligan(username) {
   if (!confirm(`Grant mulligan to ${username}? Their streak will be preserved; coin stays consumed.`)) return;
   const p = allAdminPlayers.find(pp => pp.username === username);
-  // mulligan_streak_at_loss not yet in live schema; p.streak already holds
-  // the held value because request_mulligan wrote it there. Fall back to p.streak
-  // so the streak is correctly preserved when the column is absent.
-  const preservedStreak = p?.mulligan_streak_at_loss ?? p?.streak ?? 0;
+  const preservedStreak = p?.mulligan_streak_at_loss || 0;
   try {
     await adminPatch(username, {
       status: 'active',
@@ -5706,250 +5706,6 @@ async function assignPick(playerId, playerName, teamAbbr) {
     sessionStorage.removeItem('bsh_player');
   }
 })();
-</script>
-
-<style id="bsh-upgrades-styles">
-@keyframes bshPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.3)} }
-@keyframes bshSlideUp { from{transform:translateY(70px) scale(0.92);opacity:0} to{transform:translateY(0) scale(1);opacity:1} }
-#bsh-levelup-overlay {
-  display:none;position:fixed;inset:0;z-index:10000;
-  background:rgba(0,0,0,0.92);
-  align-items:center;justify-content:center;flex-direction:column;
-}
-#bsh-levelup-card {
-  text-align:center;
-  animation:bshSlideUp 0.5s cubic-bezier(.22,.68,0,1.2) both;
-  padding:40px 28px;max-width:380px;width:90%;
-}
-#bsh-levelup-icon {
-  font-size:84px;line-height:1;display:block;
-  animation:bshPulse 3s ease-in-out infinite;
-  margin-bottom:18px;
-}
-#bsh-levelup-name {
-  font-size:34px;font-weight:900;margin:0 0 10px;
-  text-shadow:0 0 24px currentColor;letter-spacing:3px;font-family:inherit;
-}
-#bsh-levelup-streak {
-  font-size:20px;color:#fff;margin-bottom:28px;font-weight:600;letter-spacing:1px;
-}
-#bsh-levelup-dismiss {
-  background:linear-gradient(135deg,#00e676,#00b04f);
-  color:#000;font-weight:900;font-size:17px;
-  padding:14px 44px;border:none;border-radius:50px;cursor:pointer;
-  letter-spacing:1px;transition:transform 0.15s,box-shadow 0.15s;
-  box-shadow:0 4px 20px rgba(0,230,118,0.35);
-}
-#bsh-levelup-dismiss:hover { transform:scale(1.05); }
-#bsh-share-card {
-  margin-top:22px;
-  background:linear-gradient(145deg,#12121f,#1a1a2e);
-  border:1px solid rgba(255,255,255,0.1);border-radius:16px;
-  padding:20px 28px;display:none;
-  box-shadow:0 8px 32px rgba(0,0,0,0.5);
-}
-#bsh-share-player { font-size:15px;color:#ccc;margin-bottom:8px; }
-#bsh-share-badge  { font-size:30px;font-weight:900;margin-bottom:4px; }
-#bsh-share-tier   { font-size:12px;font-weight:700;letter-spacing:3px;margin-bottom:10px;opacity:0.9; }
-#bsh-share-date   { font-size:11px;color:#666;margin-bottom:14px; }
-#bsh-share-footer { font-size:10px;color:#444;margin-bottom:12px; }
-#bsh-share-action {
-  width:100%;background:linear-gradient(135deg,#1da1f2,#0d8ecf);
-  color:#fff;font-weight:700;font-size:14px;
-  padding:11px 0;border:none;border-radius:50px;cursor:pointer;
-  transition:transform 0.15s;
-}
-#bsh-share-action:hover { transform:scale(1.03); }
-#bsh-bell-btn {
-  position:fixed;top:80px;right:16px;width:46px;height:46px;
-  border-radius:50%;background:rgba(20,20,32,0.9);
-  border:1px solid rgba(255,255,255,0.18);font-size:20px;
-  cursor:pointer;z-index:9998;backdrop-filter:blur(10px);
-  transition:transform 0.2s,box-shadow 0.2s;display:none;
-  box-shadow:0 2px 12px rgba(0,0,0,0.4);
-}
-#bsh-bell-btn:hover { transform:scale(1.12);box-shadow:0 4px 18px rgba(0,0,0,0.5); }
-</style>
-<!-- BSH Upgrades: Level-Up Modal + Share Card + Push Notifications -->
-<div id="bsh-levelup-overlay" role="dialog" aria-modal="true">
-  <div id="bsh-levelup-card">
-    <span id="bsh-levelup-icon"></span>
-    <div  id="bsh-levelup-name"></div>
-    <div  id="bsh-levelup-streak"></div>
-    <button id="bsh-levelup-dismiss" onclick="bshDismissLevelUp()">LET'S GO &rarr;</button>
-    <div id="bsh-share-card">
-      <div style="color:#ffd700;font-size:19px;font-weight:900;margin-bottom:6px;">&#x1F3C6; 42 STREAK HOUSE</div>
-      <div id="bsh-share-player"></div>
-      <div id="bsh-share-badge"></div>
-      <div id="bsh-share-tier"></div>
-      <div id="bsh-share-date"></div>
-      <div id="bsh-share-footer">42streakhouse.com</div>
-      <button id="bsh-share-action" onclick="bshShareCard()">&#x1F4E4; Share Your Streak</button>
-    </div>
-  </div>
-</div>
-<button id="bsh-bell-btn" title="Enable push notifications" onclick="bshTogglePush()"></button>
-<script id="bsh-upgrades-script">
-// ============================================================
-// BSH UPGRADES v1.0 — Level-Up Modal + Share Card + Push
-// ============================================================
-const BSH_VAPID_PUBLIC = 'BCZ30nDna_ZDjDNzpBdBVmjjD9aPI2LEaEA33KUpN1h-cEiArWYJBL6fvlyCJKKiOdt0xh8VNiVS0i5f8eMqzt0';
-
-const BSH_MILESTONES = {
-  1:  { name: 'FIRST HIT',        icon: '\u26BE',                    color: '#4caf50' },
-  3:  { name: 'ON A ROLL',        icon: '\uD83D\uDD25',             color: '#ff9800' },
-  5:  { name: 'HEATING UP',      icon: '\uD83D\uDD25',             color: '#ff6b35' },
-  10: { name: 'ON FIRE',         icon: '\uD83D\uDD25\uD83D\uDD25', color: '#ff4500' },
-  15: { name: 'SCORCHER',        icon: '\u26A1',                    color: '#ffd700' },
-  20: { name: 'LEGENDARY',       icon: '\uD83D\uDC80',             color: '#9b59b6' },
-  25: { name: 'MYTHIC',          icon: '\uD83D\uDC51',             color: '#e74c3c' },
-  30: { name: 'IMMORTAL',        icon: '\uD83C\uDF1F',             color: '#00d4ff' },
-  35: { name: 'UNTOUCHABLE',     icon: '\uD83D\uDC10',             color: '#2ecc71' },
-  42: { name: "JACKIE'S NUMBER", icon: '\uD83C\uDFC6',             color: '#ffd700' }
-};
-
-let _bshMilestone = null;
-
-function bshShowLevelUp(streak, playerName) {
-  const m = BSH_MILESTONES[streak];
-  if (!m) return;
-  _bshMilestone = { streak, playerName, name: m.name };
-
-  document.getElementById('bsh-levelup-icon').textContent = m.icon;
-  const nm = document.getElementById('bsh-levelup-name');
-  nm.textContent = m.name; nm.style.color = m.color;
-  document.getElementById('bsh-levelup-streak').textContent =
-    'STREAK: ' + streak + ' DAYS \uD83D\uDD25';
-
-  // Populate share card
-  document.getElementById('bsh-share-player').textContent = playerName;
-  const badge = document.getElementById('bsh-share-badge');
-  badge.textContent = 'DAY ' + streak; badge.style.color = m.color;
-  const tier = document.getElementById('bsh-share-tier');
-  tier.textContent = m.name; tier.style.color = m.color;
-  document.getElementById('bsh-share-date').textContent =
-    new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
-  document.getElementById('bsh-share-card').style.display = 'block';
-
-  // Reset card animation so it re-fires each time
-  const card = document.getElementById('bsh-levelup-card');
-  card.style.animation = 'none';
-  requestAnimationFrame(() => { card.style.animation = ''; });
-
-  const ol = document.getElementById('bsh-levelup-overlay');
-  ol.style.display = 'flex';
-  document.body.style.overflow = 'hidden';
-}
-
-function bshDismissLevelUp() {
-  document.getElementById('bsh-levelup-overlay').style.display = 'none';
-  document.body.style.overflow = '';
-  _bshMilestone = null;
-}
-
-async function bshShareCard() {
-  if (!_bshMilestone) return;
-  const { streak, playerName, name } = _bshMilestone;
-  const text = 'Day ' + streak + ' on 42 Streak House \uD83D\uDD25 Just hit ' + name +
-    ' with ' + playerName + '. Can I reach 42? https://42streakhouse.com';
-  if (navigator.share) {
-    await navigator.share({ title: '42 Streak House', text }).catch(function(){});
-  } else {
-    try { await navigator.clipboard.writeText(text); } catch(_) {}
-    alert('Copied to clipboard!');
-  }
-}
-
-// Patch _displayBang: after confetti fires (3s), check for milestone
-(function patchBang() {
-  if (typeof _displayBang !== 'function') { setTimeout(patchBang, 150); return; }
-  var _orig = _displayBang;
-  window._displayBang = function(payload) {
-    _orig.call(this, payload);
-    if (BSH_MILESTONES[payload.newStreak]) {
-      setTimeout(function() { bshShowLevelUp(payload.newStreak, payload.batterName); }, 3200);
-    }
-  };
-})();
-
-// Close overlay on backdrop click
-document.getElementById('bsh-levelup-overlay').addEventListener('click', function(e) {
-  if (e.target === this) bshDismissLevelUp();
-});
-
-// ===== PUSH NOTIFICATIONS =====
-function bshUrlB64ToUint8Array(b64) {
-  var pad = '='.repeat((4 - b64.length % 4) % 4);
-  var raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
-  var arr = new Uint8Array(raw.length);
-  for (var i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
-  return arr;
-}
-
-var _bshPushReg = null, _bshPushSub = null;
-
-function bshUpdateBell(subscribed) {
-  var btn = document.getElementById('bsh-bell-btn');
-  if (!btn) return;
-  btn.textContent = subscribed ? '\uD83D\uDD14' : '\uD83D\uDD15';
-  btn.title = subscribed ? 'Disable push notifications' : 'Enable push notifications';
-}
-
-async function bshInitPush() {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-  try {
-    _bshPushReg = await navigator.serviceWorker.register('/sw.js');
-    _bshPushSub = await _bshPushReg.pushManager.getSubscription();
-    bshUpdateBell(!!_bshPushSub);
-  } catch(e) { console.warn('[bsh] SW init:', e.message); }
-}
-
-async function bshTogglePush() {
-  if (!_bshPushReg) { await bshInitPush(); }
-  if (!_bshPushReg) return;
-  if (_bshPushSub) {
-    try { await _bshPushSub.unsubscribe(); } catch(_) {}
-    _bshPushSub = null;
-    bshUpdateBell(false);
-    return;
-  }
-  var perm = await Notification.requestPermission();
-  if (perm !== 'granted') return;
-  try {
-    var sub = await _bshPushReg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: bshUrlB64ToUint8Array(BSH_VAPID_PUBLIC)
-    });
-    _bshPushSub = sub;
-    bshUpdateBell(true);
-    var j = sub.toJSON();
-    fetch('/api/subscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        endpoint: sub.endpoint,
-        keys: { p256dh: (j.keys || {}).p256dh, auth: (j.keys || {}).auth },
-        userId: (window.currentPlayer || {}).username || null
-      })
-    }).catch(function(e) { console.warn('[bsh] subscribe error:', e.message); });
-  } catch(e) { console.warn('[bsh] push subscribe error:', e.message); }
-}
-
-// Show bell button after user logs in — patch enterApp
-(function patchEnterApp() {
-  if (typeof enterApp !== 'function') { setTimeout(patchEnterApp, 150); return; }
-  var _orig = enterApp;
-  window.enterApp = async function() {
-    var result = await _orig.apply(this, arguments);
-    var btn = document.getElementById('bsh-bell-btn');
-    if (btn) btn.style.display = 'flex';
-    bshUpdateBell(!!_bshPushSub);
-    return result;
-  };
-})();
-
-// Boot SW immediately
-bshInitPush();
 </script>
 </body>
 </html>
